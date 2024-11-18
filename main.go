@@ -6,12 +6,10 @@ import (
 	"log"
 	"strconv"
 
-	
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/google/uuid"
-	"logSearch/aggregate" // Replace with the correct import path
 )
 
 var ctx = context.Background()
@@ -19,9 +17,17 @@ var ctx = context.Background()
 func main() {
 	app := fiber.New()
 
+	app.Options("/*", func(c *fiber.Ctx) error {
+		c.Set("Access-Control-Allow-Origin", "*")
+		c.Set("Access-Control-Allow-Methods", "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS")
+		c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept")
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+	
+
 	// Enable CORS
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*", // Allow requests from this origin
+		AllowOrigins: "http://localhost:8080", // Allow requests from this origin
 		AllowMethods: "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
 		AllowHeaders: "Origin, Content-Type, Accept",
 	}))
@@ -38,18 +44,14 @@ func main() {
 	})
 
 	// Route when uuid parameter is not passed
-	app.Get("/search/:starttime/:endtime", func(c *fiber.Ctx) error {
+	app.Get("/search", func(c *fiber.Ctx) error {
 		newUUID := uuid.New().String()
 
 		// Call MainFunction with the new UUID
-		go aggregate.MainFunction(c, newUUID, c.Params("starttime"), c.Params("endtime"))
+		go MainFunction(newUUID)
 
 		// Only return the new UUID
 		return c.JSON(fiber.Map{"uuid": newUUID})
-
-		
-
-
 	})
 
 	// Route when uuid parameter is passed
@@ -78,7 +80,7 @@ func main() {
 		}
 
 		// Paginate the results
-		chunkSize := 50
+		chunkSize := 100
 		if offset > len(results) {
 			return c.Status(fiber.StatusBadRequest).SendString("Offset out of range")
 		}
@@ -95,8 +97,6 @@ func main() {
 			"offset": end,
 		})
 	})
-
-	
 
 	log.Fatal(app.Listen(":3000"))
 }
