@@ -27,7 +27,7 @@ func main() {
 
 	// Enable CORS
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "http://localhost:8080", // Allow requests from this origin
+		AllowOrigins: "*", // Allow requests from this origin
 		AllowMethods: "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
 		AllowHeaders: "Origin, Content-Type, Accept",
 	}))
@@ -47,9 +47,6 @@ func main() {
 	app.Get("/search", func(c *fiber.Ctx) error {
 		newUUID := uuid.New().String()
 
-		// Call MainFunction with the new UUID
-		go MainFunction(newUUID)
-
 		// Only return the new UUID
 		return c.JSON(fiber.Map{"uuid": newUUID})
 	})
@@ -58,22 +55,28 @@ func main() {
 	app.Get("/search/:uuid/:offset", func(c *fiber.Ctx) error {
 		param := c.Params("uuid")
 		offsetStr := c.Params("offset")
+		regex := c.Query("regex", "")
+		text := c.Query("text", "")
 		offset, err := strconv.Atoi(offsetStr)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).SendString("Invalid offset")
 		}
 
+		// Call MainFunction with the new UUID
+		MainFunction(param, regex, text)
+
 		log.Printf("Fetching logs for UUID: %s with offset: %d", param, offset)
 
 		// Fetch logs from Redis
 		data, err := rdb.Get(ctx, param).Result()
+		log.Printf("Fetched data: %s", data)
 		if err != nil {
 			if err == redis.Nil {
 				return c.Status(fiber.StatusNotFound).SendString("UUID not found")
 			}
 			return c.Status(fiber.StatusInternalServerError).SendString("Error fetching data from Redis")
 		}
-
+		log.Printf("Fetched %d bytes of data", len(data))
 		var results []map[string]interface{}
 		if err := json.Unmarshal([]byte(data), &results); err != nil {
 			return c.Status(fiber.StatusInternalServerError).SendString("Error unmarshalling JSON")
@@ -92,6 +95,7 @@ func main() {
 
 		paginatedResults := results[offset:end]
 
+		log.Printf("Returning %d results", len(paginatedResults))
 		return c.JSON(fiber.Map{
 			"data":   paginatedResults,
 			"offset": end,
